@@ -466,6 +466,14 @@ void SemanticAnalyzer::analyzeMethodCall(MethodCallExpr& call) {
         return;
     }
 
+    const MethodSymbol* method = classTable_.findMethod(call.name);
+    if (!method) {
+        error(call.line, call.col, "unknown method '" + call.name + "'");
+        if (call.target) analyzeExpr(*call.target);
+        for (auto& a : call.args) analyzeExpr(*a);
+        return;
+    }
+
     bool targetOk = true;
     if (call.target) {
         analyzeExpr(*call.target);
@@ -478,17 +486,10 @@ void SemanticAnalyzer::analyzeMethodCall(MethodCallExpr& call) {
                       toString(call.target->resolvedType));
             targetOk = false;
         }
-    } else if (currentMethod_->isStatic) {
+    } else if (currentMethod_->isStatic && !method->isStatic) {
         error(call.line, call.col,
               "cannot call instance method '" + call.name + "' from a static context");
         targetOk = false;
-    }
-
-    const MethodSymbol* method = classTable_.findMethod(call.name);
-    if (!method) {
-        error(call.line, call.col, "unknown method '" + call.name + "'");
-        for (auto& a : call.args) analyzeExpr(*a);
-        return;
     }
     if (call.args.size() != method->paramTypes.size()) {
         error(call.line, call.col,

@@ -140,9 +140,67 @@ confirmed available locally, so there's no need to implement a Java runtime
     to `String`-typed locals/fields/params and comparable with `==`/`!=`,
     but `+` concatenation is explicitly rejected with a "not supported yet"
     diagnostic (real string behavior is deferred, see subset-v0.md).
-- **M5 — Bytecode generation: not started.**
-- **M6 — End-to-end verification harness + CLI: not started** (the CLI
-  currently just prints a usage/error message).
+- **M5 — Bytecode generation: done.** `src/codegen/`: `Opcodes.hpp` (named
+  JVM opcode constants), `ByteWriter` (growable big-endian buffer with
+  branch-offset backpatching), `ConstantPool` (dedupes UTF8/Class/String/
+  Integer/Double/NameAndType/Fieldref/Methodref entries, handles Double's
+  2-slot quirk), `Descriptors` (`Type` → JVM descriptor strings, simple
+  class name → binary name, with a small fixed table for `String`/`Object`),
+  `MethodCodeGen` (walks a sema-attributed method/constructor body and
+  emits bytecode, tracking operand-stack depth for `max_stack`), and
+  `ClassFileWriter` (assembles the full `.class` file: constant pool,
+  fields, methods, synthesizes a default no-arg constructor when the user
+  didn't write one). Trusts every sema-attributed field completely — does
+  no type checking of its own.
+- **M6 — End-to-end verification harness + CLI: done.** `src/driver/main.cpp`
+  runs the full pipeline (lex → parse → sema → codegen → write `.class`),
+  printing `file:line:col: error: ...` diagnostics and exiting non-zero on
+  the first stage that fails; `--dump-tokens`/`--dump-ast` inspect
+  intermediate stages. `tests/programs/` holds 5 real `.java` samples
+  (`Hello`, `Arith`, `Fib`, `Counter`, `Recursion`) each paired with a
+  `.expected` stdout file; `tests/unit/e2e_test.cpp` compiles each with our
+  own pipeline (calling the library directly, not shelling out to the
+  `compiler` binary) and runs the result on the real `java` binary
+  (OpenJDK 21), diffing stdout. Cross-checked `Counter.class` against
+  `javap -c -p` by hand during development — bytecode was clean and matched
+  what `javac` itself would emit. Compiled out entirely (via `#ifdef
+  JAVA_EXECUTABLE`) if CMake can't find a `java` on PATH, so the rest of the
+  suite still runs on a machine without a JDK. 48/48 tests passing overall.
+
+  A real bug found and fixed via this harness: `if (cond) { return 1; }
+  else { return n * f(n-1); }` (see `Recursion.java`) produced a
+  `VerifyError: Illegal target of jump or branch`, because the codegen
+  unconditionally emitted a `goto` after the then-branch to skip the
+  else-branch — when both branches always return and the if/else is the
+  method's last statement, that `goto`'s target lands one byte past the end
+  of the Code array (nothing to jump to). Fixed with
+  `MethodCodeGen::alwaysReturns()`, a small conservative "does every path
+  through this statement end in return" check that skips the dead `goto`
+  when the then-branch never falls through.
+
+  Also fixed while wiring this up: `SemanticAnalyzer::analyzeMethodCall`
+  used to reject *any* unqualified call from a static method (e.g. `main`
+  calling another static helper by name), because it checked
+  `currentMethod_->isStatic` before knowing whether the callee itself was
+  static. Reordered to resolve the method symbol first, then only complain
+  when an unqualified call targets a non-static method from a static
+  context.
+
+  Known v0 codegen limitations, all deliberate and documented rather than
+  fixed, since fixing them properly means real control-flow/definite-
+  assignment analysis that's out of scope for this stage:
+  - **Assignment expressions leave nothing on the stack** (`genAssign`) —
+    correct real Java semantics would leave the assigned value there so
+    assignment can be used as a sub-expression. v0 only ever emits
+    assignment at statement position or a for-loop update clause, where
+    this doesn't matter; something like `foo(x = 5)` parses but would
+    generate bytecode with an unbalanced stack.
+  - **No definite-assignment or definite-return analysis in sema.** A
+    non-void method that doesn't return on every path, or a local read
+    before any store reaches it, will pass sema but can fail JVM
+    verification when the `.class` file loads. Every method in
+    `tests/programs/` is written to avoid this; new sample programs should
+    be too.
 
 ## Conventions established so far
 

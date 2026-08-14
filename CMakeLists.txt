@@ -31,6 +31,14 @@ file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS tests/unit/*.cpp)
 add_executable(compiler_tests ${TEST_SOURCES})
 target_link_libraries(compiler_tests PRIVATE compiler_core doctest::doctest)
 target_include_directories(compiler_tests PRIVATE src)
+target_compile_definitions(compiler_tests PRIVATE PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
+# The e2e test (tests/unit/e2e_test.cpp) runs generated .class files on a
+# real JVM; it skips itself gracefully if `java` isn't found.
+find_program(JAVA_EXECUTABLE java)
+if(JAVA_EXECUTABLE)
+    target_compile_definitions(compiler_tests PRIVATE JAVA_EXECUTABLE="${JAVA_EXECUTABLE}")
+endif()
 
 include(${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake)
 doctest_discover_tests(compiler_tests)
