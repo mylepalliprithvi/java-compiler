@@ -4,9 +4,9 @@ The below information along with the entire project source code is written/gener
 
 The attempt was to check how compilers are developed/written and how to use Claude Code for the same.
 
-#Model used: Sonnet 5
+Model used: Sonnet 5
 
-#Tokens used approximately: 120k
+Tokens used approximately: 120k
 
 A hand-written compiler, in C++20, that takes a small subset of Java source
 and produces a real `.class` file — runnable by any standard JVM, no custom
