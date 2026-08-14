@@ -74,8 +74,37 @@ confirmed available locally, so there's no need to implement a Java runtime
   and expressions, `System.out.println` special-cased. Arrays, `String`,
   interfaces, exceptions, generics, lambdas, etc. explicitly deferred (full
   ordered list in that doc).
-- **M2 — Lexer: not started.**
-- **M3 — Parser/AST: not started.**
+- **M2 — Lexer: done.** `src/lexer/{Token,Lexer}.{hpp,cpp}` — hand-written
+  scanner covering the v0 token set (keywords, identifiers, int/double
+  literals, string literals with `\n \t \" \\` escapes, all v0 operators,
+  punctuation, `//` and `/* */` comments). Never throws: unrecognized input
+  produces an `Error` token plus a `LexError{line,col,message}` recorded via
+  `Lexer::errors()`, so multiple diagnostics can be collected per file.
+  14 unit tests in `tests/unit/lexer_test.cpp`, all passing.
+- **M3 — Parser/AST: done.** AST types in `src/ast/` (`Type`, `Expr`, `Stmt`,
+  `Decl`) using a small inheritance hierarchy with a `Kind` enum tag on each
+  node (downcast via `static_cast` after a `switch` on `kind` — no visitor
+  yet). `src/parser/Parser.{hpp,cpp}` is a recursive-descent parser with a
+  precedence-climbing expression parser (assignment → `||` → `&&` →
+  equality → relational → additive → multiplicative → unary → postfix →
+  primary). Never throws out of `parseCompilationUnit()`: syntax errors
+  throw an internal `ParseException` that unwinds to the nearest
+  statement/member boundary, gets recorded as a `ParseError` via
+  `Parser::errors()`, then parsing resumes (panic-mode recovery), so one
+  file can report multiple syntax errors. `src/ast/AstPrinter.{hpp,cpp}`
+  renders a tree as a deterministic S-expression string, used by parser
+  tests for snapshot-style assertions instead of hand-building expected
+  trees. 14 new tests in `tests/unit/parser_test.cpp` (28/28 total passing).
+
+  Two decisions worth knowing about:
+  - `Type` supports `ArrayOfClassRef` (e.g. `String[]`) purely so a real
+    `main(String[] args)` signature can be *parsed* — array values
+    (indexing, `new T[]`, etc.) are still unimplemented; semantic analysis
+    (M4) should reject arrays anywhere except that one parameter position.
+  - Unary `-` and `!` are supported even though `docs/subset-v0.md`'s
+    expression list only mentions them in binary/logical form — treated as
+    a necessary reading of the existing "arithmetic"/"logical" operator
+    entries, not a scope expansion, since `x = -1;` needs to work.
 - **M4 — Semantic analysis: not started.**
 - **M5 — Bytecode generation: not started.**
 - **M6 — End-to-end verification harness + CLI: not started** (the CLI
