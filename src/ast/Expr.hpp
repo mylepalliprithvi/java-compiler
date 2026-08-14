@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "ast/Type.hpp"
+
 namespace jc {
 
 enum class ExprKind {
@@ -29,6 +31,12 @@ struct Expr {
     ExprKind kind;
     int line;
     int col;
+
+    // Filled in by SemanticAnalyzer; codegen trusts these without re-deriving
+    // them. typeResolved stays false for nodes sema couldn't type (e.g. one
+    // that already had a parse error), so codegen never runs over them.
+    Type resolvedType = Type::primitive(Type::Kind::Void);
+    bool typeResolved = false;
 };
 
 using ExprPtr = std::unique_ptr<Expr>;
@@ -54,11 +62,16 @@ struct StringLiteralExpr : Expr {
     std::string value;
 };
 
-// A bare identifier reference (local, param, field, or unqualified class
-// name) — resolved during semantic analysis, not by the parser.
+// A bare identifier reference (local, param, or field) — resolved during
+// semantic analysis, not by the parser.
 struct NameExpr : Expr {
+    enum class RefKind { Unresolved, Local, Field };
+
     NameExpr(std::string n, int line, int col) : Expr(ExprKind::Name, line, col), name(std::move(n)) {}
     std::string name;
+
+    RefKind refKind = RefKind::Unresolved;
+    int slot = -1;  // valid only when refKind == Local
 };
 
 struct ThisExpr : Expr {
@@ -75,6 +88,8 @@ struct FieldAccessExpr : Expr {
 
 // target.name(args) — target is null for an unqualified call (implicit this).
 struct MethodCallExpr : Expr {
+    enum class CallKind { Unresolved, UserMethod, PrintlnSpecial };
+
     MethodCallExpr(ExprPtr t, std::string n, std::vector<ExprPtr> a, int line, int col)
         : Expr(ExprKind::MethodCall, line, col),
           target(std::move(t)),
@@ -83,6 +98,12 @@ struct MethodCallExpr : Expr {
     ExprPtr target;
     std::string name;
     std::vector<ExprPtr> args;
+
+    // PrintlnSpecial means `target` was recognized as the fixed
+    // `System.out.println(...)` pattern and was NOT itself resolved as a
+    // general expression (see SemanticAnalyzer) — java.lang.System has no
+    // symbol-table entry in v0.
+    CallKind callKind = CallKind::Unresolved;
 };
 
 struct NewExpr : Expr {

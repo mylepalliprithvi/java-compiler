@@ -12,6 +12,7 @@ namespace jc {
 struct Param {
     Type type;
     std::string name;
+    int slot = -1;  // filled in by SemanticAnalyzer
 };
 
 struct FieldDecl {
@@ -28,6 +29,9 @@ struct ConstructorDecl {
     std::unique_ptr<BlockStmt> body;
     int line = 0;
     int col = 0;
+    // Highest local-variable slot index used + 1 (i.e. required table size),
+    // filled in by SemanticAnalyzer; codegen needs it for max_locals.
+    int maxLocals = 0;
 };
 
 struct MethodDecl {
@@ -39,6 +43,7 @@ struct MethodDecl {
     std::unique_ptr<BlockStmt> body;
     int line = 0;
     int col = 0;
+    int maxLocals = 0;  // see ConstructorDecl::maxLocals
 };
 
 struct ClassDecl {

@@ -44,6 +44,7 @@ struct LocalVarDeclStmt : Stmt {
     Type type;
     std::string name;
     ExprPtr init;  // nullable
+    int slot = -1;  // filled in by SemanticAnalyzer
 };
 
 struct IfStmt : Stmt {

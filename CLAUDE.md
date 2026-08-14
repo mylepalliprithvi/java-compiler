@@ -105,7 +105,41 @@ confirmed available locally, so there's no need to implement a Java runtime
     expression list only mentions them in binary/logical form — treated as
     a necessary reading of the existing "arithmetic"/"logical" operator
     entries, not a scope expansion, since `x = -1;` needs to work.
-- **M4 — Semantic analysis: not started.**
+- **M4 — Semantic analysis: done.** `src/sema/ClassTable.{hpp,cpp}` builds a
+  symbol table for the single class in the compilation unit (fields,
+  methods — no overloading, so a name is one symbol — and the constructor's
+  parameter types); `src/sema/SemanticAnalyzer.{hpp,cpp}` does name
+  resolution and type checking, attributing the AST in place rather than
+  building a parallel typed tree: `Expr::resolvedType`/`typeResolved`,
+  `NameExpr::refKind`/`slot`, `MethodCallExpr::callKind`,
+  `LocalVarDeclStmt::slot`, `Param::slot`, and
+  `MethodDecl`/`ConstructorDecl::maxLocals` are all filled in for codegen
+  (M5) to read directly. 19 new tests in `tests/unit/sema_test.cpp` (47/47
+  total passing).
+
+  Notable decisions:
+  - `System.out.println(...)` is matched as a fixed AST *shape*
+    (`MethodCallExpr` named `println` whose target is `FieldAccessExpr`
+    named `out` off a `NameExpr` named `System`) rather than resolved
+    through the symbol table — `System`/`out` have no symbol-table entries
+    in v0, so matching happens before the target would otherwise fail to
+    resolve. See `SemanticAnalyzer::isPrintlnPattern`.
+  - Local variable slots are assigned during sema (not deferred to codegen)
+    since sema already walks scopes in order; `double` locals/params
+    correctly consume 2 JVM local-variable slots. Slots are never reused
+    across sibling blocks (simpler, slightly wasteful — fine for v0).
+  - `extends` is recorded on `ClassTable` for codegen's benefit (the
+    `super_class` constant pool entry, `invokespecial <init>` in
+    constructors) but member lookup never walks into the superclass: v0
+    has no multi-file compilation, so nothing is actually known about a
+    superclass beyond its name. Calling an inherited method/field that
+    isn't redeclared on the subclass will incorrectly report "unknown
+    method/field" — a known v0 limitation, not a bug to fix later without
+    also adding multi-file compilation.
+  - `String` values type-check as an opaque `ClassRef("String")` — assignable
+    to `String`-typed locals/fields/params and comparable with `==`/`!=`,
+    but `+` concatenation is explicitly rejected with a "not supported yet"
+    diagnostic (real string behavior is deferred, see subset-v0.md).
 - **M5 — Bytecode generation: not started.**
 - **M6 — End-to-end verification harness + CLI: not started** (the CLI
   currently just prints a usage/error message).
